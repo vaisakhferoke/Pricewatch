@@ -1,0 +1,11 @@
+# Free alternative to Vercel Pro cron: runs every 4 hours.
+# Add repo secrets: APP_URL (https://your-app.vercel.app) and CRON_SECRET.
+name: Check prices
+on:
+  schedule: [{ cron: "0 */4 * * *" }]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.APP_URL }}/api/cron/check"
