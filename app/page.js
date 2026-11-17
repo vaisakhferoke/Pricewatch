@@ -37,6 +37,7 @@ function Spark({ history, target }) {
 
 export default function Home() {
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [chatId, setChatId] = useState("");
   const [url, setUrl] = useState("");
   const [target, setTarget] = useState("");
@@ -46,8 +47,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [checkingId, setCheckingId] = useState(null);
 
-  // Auth modal state
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  // Auth form state for Login Gate
   const [authMode, setAuthMode] = useState("login"); // "login" | "register"
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -77,21 +77,20 @@ export default function Home() {
       const data = await res.json().catch(() => ({}));
       if (data.user) {
         setUser(data.user);
-        if (data.user.chat_id) {
-          setChatId(data.user.chat_id);
-          try { localStorage.setItem("chatId", data.user.chat_id); } catch {}
-          load(data.user.chat_id);
-          return;
+        const cid = data.user.chat_id || "";
+        if (cid) {
+          setChatId(cid);
+          try { localStorage.setItem("chatId", cid); } catch {}
         }
+        load(cid);
+      } else {
+        setUser(null);
       }
-    } catch {}
-    try {
-      const saved = localStorage.getItem("chatId") || "";
-      if (saved) {
-        setChatId(saved);
-        load(saved);
-      }
-    } catch {}
+    } catch {
+      setUser(null);
+    } finally {
+      setAuthLoading(false);
+    }
   }, [load]);
 
   useEffect(() => {
@@ -119,13 +118,13 @@ export default function Home() {
         return setAuthError(data.error || "Authentication failed.");
       }
       setUser(data.user);
-      if (data.user.chat_id) {
-        setChatId(data.user.chat_id);
-        try { localStorage.setItem("chatId", data.user.chat_id); } catch {}
+      const cid = data.user.chat_id || "";
+      if (cid) {
+        setChatId(cid);
+        try { localStorage.setItem("chatId", cid); } catch {}
       }
-      setShowAuthModal(false);
       setAuthPassword("");
-      load(data.user.chat_id || chatId);
+      load(cid);
     } catch (err) {
       setAuthBusy(false);
       setAuthError(err.message || "Authentication request failed.");
@@ -135,7 +134,7 @@ export default function Home() {
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
-    load(chatId);
+    setProducts([]);
   }
 
   async function saveTelegramId(e) {
@@ -223,6 +222,87 @@ export default function Home() {
     load(chatId.trim());
   }
 
+  // 1. Loading state while checking authentication
+  if (authLoading) {
+    return (
+      <main className="loading-gate">
+        <p>Loading Pricewatch…</p>
+      </main>
+    );
+  }
+
+  // 2. Login Gate: visitors must authenticate first
+  if (!user) {
+    return (
+      <main className="login-gate">
+        <div className="login-card">
+          <div className="login-header">
+            <h1>Pricewatch</h1>
+            <p>Sign in to monitor Amazon & Flipkart prices with automated Telegram alerts.</p>
+          </div>
+
+          <div className="auth-tabs">
+            <button
+              className={`auth-tab ${authMode === "login" ? "active" : ""}`}
+              onClick={() => { setAuthMode("login"); setAuthError(""); }}
+            >
+              Sign in
+            </button>
+            <button
+              className={`auth-tab ${authMode === "register" ? "active" : ""}`}
+              onClick={() => { setAuthMode("register"); setAuthError(""); }}
+            >
+              Create account
+            </button>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} style={{ position: "static", padding: 0, border: "none", background: "none" }}>
+            <label>Email address
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoFocus
+              />
+            </label>
+
+            <label>Password
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="At least 6 characters"
+              />
+            </label>
+
+            {authMode === "register" && (
+              <label>Telegram Chat ID (optional)
+                <input
+                  inputMode="numeric"
+                  value={authChatId}
+                  onChange={(e) => setAuthChatId(e.target.value)}
+                  placeholder="e.g. 543236588"
+                />
+                <small>Send /start to @oviro_price_tracker_bot to get this number (can also be set later).</small>
+              </label>
+            )}
+
+            {authError && <p className="note err">{authError}</p>}
+
+            <button className="btn" style={{ width: "100%", marginTop: "8px" }} disabled={authBusy}>
+              {authBusy ? "Please wait…" : (authMode === "login" ? "Sign in to Dashboard" : "Create Account & Start")}
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // 3. Authenticated Dashboard
   return (
     <main className="wrap">
       <header>
@@ -232,99 +312,28 @@ export default function Home() {
         </div>
 
         <div>
-          {user ? (
-            <div className="user-card">
-              <div>
-                <span className="user-email">{user.email}</span>
-                {user.chat_id ? (
-                  <span className="tg-tag" style={{ marginLeft: "8px" }}>
-                    TG: {user.chat_id}
-                  </span>
-                ) : (
-                  <button className="link" style={{ fontSize: "0.82rem", marginLeft: "8px" }} onClick={() => { setTempChatId(""); setShowTgModal(true); }}>
-                    + Link Telegram
-                  </button>
-                )}
-              </div>
-              <button className="link" style={{ fontSize: "0.82rem" }} onClick={() => { setTempChatId(user.chat_id || ""); setShowTgModal(true); }}>
-                Settings
-              </button>
-              <button className="btn-sm" onClick={handleLogout}>
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <button className="btn" onClick={() => { setAuthMode("login"); setAuthError(""); setShowAuthModal(true); }}>
-              Sign in / Register
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Auth Modal */}
-      {showAuthModal && (
-        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setShowAuthModal(false)} aria-label="Close">✕</button>
-            
-            <div className="auth-tabs">
-              <button
-                className={`auth-tab ${authMode === "login" ? "active" : ""}`}
-                onClick={() => { setAuthMode("login"); setAuthError(""); }}
-              >
-                Sign in
-              </button>
-              <button
-                className={`auth-tab ${authMode === "register" ? "active" : ""}`}
-                onClick={() => { setAuthMode("register"); setAuthError(""); }}
-              >
-                Create account
-              </button>
-            </div>
-
-            <form onSubmit={handleAuthSubmit} style={{ position: "static", padding: 0, border: "none", background: "none" }}>
-              <label>Email
-                <input
-                  type="email"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder="name@example.com"
-                />
-              </label>
-
-              <label>Password
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                />
-              </label>
-
-              {authMode === "register" && (
-                <label>Telegram Chat ID (optional)
-                  <input
-                    inputMode="numeric"
-                    value={authChatId}
-                    onChange={(e) => setAuthChatId(e.target.value)}
-                    placeholder="e.g. 543236588"
-                  />
-                  <small>Can also be set later in settings.</small>
-                </label>
+          <div className="user-card">
+            <div>
+              <span className="user-email">{user.email}</span>
+              {user.chat_id ? (
+                <span className="tg-tag" style={{ marginLeft: "8px" }}>
+                  TG: {user.chat_id}
+                </span>
+              ) : (
+                <button className="link" style={{ fontSize: "0.82rem", marginLeft: "8px" }} onClick={() => { setTempChatId(""); setShowTgModal(true); }}>
+                  + Link Telegram
+                </button>
               )}
-
-              {authError && <p className="note err">{authError}</p>}
-
-              <button className="btn" style={{ marginTop: "8px" }} disabled={authBusy}>
-                {authBusy ? "Please wait…" : (authMode === "login" ? "Sign in" : "Create account")}
-              </button>
-            </form>
+            </div>
+            <button className="link" style={{ fontSize: "0.82rem" }} onClick={() => { setTempChatId(user.chat_id || ""); setShowTgModal(true); }}>
+              Settings
+            </button>
+            <button className="btn-sm" onClick={handleLogout}>
+              Sign out
+            </button>
           </div>
         </div>
-      )}
+      </header>
 
       {/* Link / Edit Telegram Modal */}
       {showTgModal && (
