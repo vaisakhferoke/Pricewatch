@@ -63,6 +63,10 @@ export async function PATCH(req, { params }) {
         args.push(target);
       }
     }
+    if (body.alert_every_check !== undefined) {
+      updates.push("alert_every_check = ?");
+      args.push(body.alert_every_check ? 1 : 0);
+    }
     if (!updates.length) return NextResponse.json({ error: "No fields to update" }, { status: 400 });
 
     args.push(params.id);

@@ -42,6 +42,7 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [target, setTarget] = useState("");
   const [checkInterval, setCheckInterval] = useState(60);
+  const [alertEveryCheck, setAlertEveryCheck] = useState(false);
   const [products, setProducts] = useState([]);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -169,6 +170,7 @@ export default function Home() {
           target_price: target,
           chat_id: chatId.trim(),
           check_interval: checkInterval,
+          alert_every_check: alertEveryCheck,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -185,6 +187,19 @@ export default function Home() {
     } catch (err) {
       setBusy(false);
       setMsg({ kind: "err", text: err.message || "Failed to connect to server" });
+    }
+  }
+
+  async function toggleAlertEveryCheck(id, enabled) {
+    try {
+      await fetch(`/api/products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId.trim(), alert_every_check: enabled ? 1 : 0 }),
+      });
+      load(chatId.trim());
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -396,6 +411,17 @@ export default function Home() {
               : "Send /start to your bot to get this number."}
           </small>
         </label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontWeight: "normal", cursor: "pointer", marginTop: "2px" }}>
+          <input
+            type="checkbox"
+            style={{ width: "17px", height: "17px", margin: "2px 0 0 0", cursor: "pointer", flexShrink: 0 }}
+            checked={alertEveryCheck}
+            onChange={(e) => setAlertEveryCheck(e.target.checked)}
+          />
+          <span style={{ fontSize: "0.85rem", lineHeight: "1.3" }}>
+            <strong>Alert on every check</strong> if price is ≤ target
+          </span>
+        </label>
         <button className="btn" disabled={busy}>{busy ? "Reading price…" : "Track product"}</button>
         {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
       </form>
@@ -444,6 +470,15 @@ export default function Home() {
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
+                    </label>
+                    <label className="interval-wrap" style={{ cursor: "pointer" }} title="Send alert on every check while price is equal to or below target">
+                      <input
+                        type="checkbox"
+                        style={{ width: "15px", height: "15px", margin: 0, cursor: "pointer" }}
+                        checked={Boolean(p.alert_every_check)}
+                        onChange={(e) => toggleAlertEveryCheck(p.id, e.target.checked)}
+                      />
+                      <span className="muted" style={{ fontSize: "0.82rem" }}>Alert every check</span>
                     </label>
                     <button
                       className="btn-sm"

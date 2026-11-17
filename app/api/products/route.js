@@ -50,6 +50,7 @@ export async function GET(req) {
       products: rows.map((r) => ({
         ...r,
         check_interval: Number(r.check_interval) || 60,
+        alert_every_check: Number(r.alert_every_check) ? 1 : 0,
         history: (byProduct[r.id] || []).slice(-30),
       })),
     });
@@ -71,6 +72,7 @@ export async function POST(req) {
       chatId = user.chat_id;
     }
     const checkInterval = Math.max(1, Number(body.check_interval) || 60);
+    const alertEveryCheck = body.alert_every_check ? 1 : 0;
 
     if (!siteOf(url)) return NextResponse.json({ error: "Enter an Amazon or Flipkart product link." }, { status: 400 });
     if (!(target > 0)) return NextResponse.json({ error: "Target price must be greater than 0." }, { status: 400 });
@@ -91,8 +93,8 @@ export async function POST(req) {
     }
 
     const res = await d.execute({
-      sql: "INSERT INTO products (url, title, current_price, target_price, chat_id, check_interval, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      args: [url, scraped?.title ?? null, scraped?.price ?? null, target, chatId, checkInterval, user?.id ?? null],
+      sql: "INSERT INTO products (url, title, current_price, target_price, chat_id, check_interval, alert_every_check, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      args: [url, scraped?.title ?? null, scraped?.price ?? null, target, chatId, checkInterval, alertEveryCheck, user?.id ?? null],
     });
     const id = Number(res.lastInsertRowid);
     if (scraped) await d.execute({ sql: "INSERT INTO price_history (product_id, price) VALUES (?, ?)", args: [id, scraped.price] });
