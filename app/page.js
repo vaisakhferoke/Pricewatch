@@ -81,7 +81,7 @@ export default function Home() {
         const cid = data.user.chat_id || "";
         if (cid) {
           setChatId(cid);
-          try { localStorage.setItem("chatId", cid); } catch {}
+          try { localStorage.setItem("chatId", cid); } catch { }
         }
         load(cid);
       } else {
@@ -122,7 +122,7 @@ export default function Home() {
       const cid = data.user.chat_id || "";
       if (cid) {
         setChatId(cid);
-        try { localStorage.setItem("chatId", cid); } catch {}
+        try { localStorage.setItem("chatId", cid); } catch { }
       }
       setAuthPassword("");
       load(cid);
@@ -150,7 +150,7 @@ export default function Home() {
       if (data.user) {
         setUser(data.user);
         setChatId(data.user.chat_id || "");
-        try { localStorage.setItem("chatId", data.user.chat_id || ""); } catch {}
+        try { localStorage.setItem("chatId", data.user.chat_id || ""); } catch { }
         setShowTgModal(false);
         load(data.user.chat_id || "");
       }
@@ -233,7 +233,7 @@ export default function Home() {
   async function remove(id) {
     try {
       await fetch(`/api/products/${id}?chat_id=${chatId.trim()}`, { method: "DELETE" });
-    } catch {}
+    } catch { }
     load(chatId.trim());
   }
 
@@ -401,7 +401,7 @@ export default function Home() {
             value={chatId}
             onChange={(e) => {
               setChatId(e.target.value);
-              try { localStorage.setItem("chatId", e.target.value); } catch {}
+              try { localStorage.setItem("chatId", e.target.value); } catch { }
             }}
             placeholder="123456789"
           />
@@ -419,7 +419,7 @@ export default function Home() {
             onChange={(e) => setAlertEveryCheck(e.target.checked)}
           />
           <span style={{ fontSize: "0.85rem", lineHeight: "1.3" }}>
-            <strong>Alert on every check</strong> if price is ≤ target
+            <strong>Alert on every check</strong> if price is &lt; target
           </span>
         </label>
         <button className="btn" disabled={busy}>{busy ? "Reading price…" : "Track product"}</button>
@@ -432,7 +432,7 @@ export default function Home() {
         ) : (
           <ul>
             {products.map((p) => {
-              const hit = p.current_price != null && p.current_price <= p.target_price;
+              const hit = p.current_price != null && p.current_price < p.target_price;
               const lastCheck = p.history?.[p.history.length - 1];
               return (
                 <li className="row" key={p.id}>
@@ -447,7 +447,7 @@ export default function Home() {
                   </div>
                   <div className={`price ${hit ? "hit" : ""}`}>
                     <strong>{inr(p.current_price)}</strong>
-                    <span className="muted">{hit ? "At or below your target of " : "Target "}{inr(p.target_price)}</span>
+                    <span className="muted">{hit ? "Below your target of " : "Target "}{inr(p.target_price)}</span>
                   </div>
                   <Spark history={p.history} target={p.target_price} />
                   <details>
