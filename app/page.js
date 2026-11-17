@@ -36,6 +36,7 @@ function Spark({ history, target }) {
 }
 
 export default function Home() {
+  const [user, setUser] = useState(null);
   const [chatId, setChatId] = useState("");
   const [url, setUrl] = useState("");
   const [target, setTarget] = useState("");
@@ -45,10 +46,23 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [checkingId, setCheckingId] = useState(null);
 
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState("login"); // "login" | "register"
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authChatId, setAuthChatId] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+
+  // Edit telegram modal
+  const [showTgModal, setShowTgModal] = useState(false);
+  const [tempChatId, setTempChatId] = useState("");
+
   const load = useCallback(async (id) => {
-    if (!/^-?\d{5,20}$/.test(id)) return setProducts([]);
+    const q = id && /^-?\d{5,20}$/.test(id) ? `?chat_id=${id}` : "";
     try {
-      const r = await fetch(`/api/products?chat_id=${id}`);
+      const r = await fetch(`/api/products${q}`);
       if (!r.ok) return setProducts([]);
       const data = await r.json().catch(() => ({}));
       setProducts(data.products || []);
@@ -57,8 +71,93 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { try { setChatId(localStorage.getItem("chatId") || ""); } catch {} }, []);
-  useEffect(() => { load(chatId.trim()); try { localStorage.setItem("chatId", chatId.trim()); } catch {} }, [chatId, load]);
+  const checkAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json().catch(() => ({}));
+      if (data.user) {
+        setUser(data.user);
+        if (data.user.chat_id) {
+          setChatId(data.user.chat_id);
+          try { localStorage.setItem("chatId", data.user.chat_id); } catch {}
+          load(data.user.chat_id);
+          return;
+        }
+      }
+    } catch {}
+    try {
+      const saved = localStorage.getItem("chatId") || "";
+      if (saved) {
+        setChatId(saved);
+        load(saved);
+      }
+    } catch {}
+  }, [load]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    setAuthError("");
+    setAuthBusy(true);
+    try {
+      const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const payload = authMode === "login"
+        ? { email: authEmail, password: authPassword }
+        : { email: authEmail, password: authPassword, chat_id: authChatId.trim() };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      setAuthBusy(false);
+      if (!res.ok) {
+        return setAuthError(data.error || "Authentication failed.");
+      }
+      setUser(data.user);
+      if (data.user.chat_id) {
+        setChatId(data.user.chat_id);
+        try { localStorage.setItem("chatId", data.user.chat_id); } catch {}
+      }
+      setShowAuthModal(false);
+      setAuthPassword("");
+      load(data.user.chat_id || chatId);
+    } catch (err) {
+      setAuthBusy(false);
+      setAuthError(err.message || "Authentication request failed.");
+    }
+  }
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
+    load(chatId);
+  }
+
+  async function saveTelegramId(e) {
+    e.preventDefault();
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: tempChatId.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.user) {
+        setUser(data.user);
+        setChatId(data.user.chat_id || "");
+        try { localStorage.setItem("chatId", data.user.chat_id || ""); } catch {}
+        setShowTgModal(false);
+        load(data.user.chat_id || "");
+      }
+    } catch (err) {
+      alert(err.message || "Failed to update Telegram ID");
+    }
+  }
 
   async function add(e) {
     e.preventDefault();
@@ -79,7 +178,11 @@ export default function Home() {
       setMsg(j.warning
         ? { kind: "warn", text: `Added, but the price couldn't be read yet (${j.warning}). We'll retry on the next check.` }
         : { kind: "ok", text: "Added. A confirmation is on its way to Telegram." });
-      setUrl(""); setTarget(""); load(chatId.trim());
+      setUrl(""); setTarget("");
+      if (user && !user.chat_id && chatId.trim()) {
+        setUser({ ...user, chat_id: chatId.trim() });
+      }
+      load(chatId.trim());
     } catch (err) {
       setBusy(false);
       setMsg({ kind: "err", text: err.message || "Failed to connect to server" });
@@ -123,9 +226,134 @@ export default function Home() {
   return (
     <main className="wrap">
       <header>
-        <h1>Pricewatch</h1>
-        <p>Paste an Amazon or Flipkart link, set the price you'd pay, and get a Telegram message when it drops.</p>
+        <div>
+          <h1>Pricewatch</h1>
+          <p>Paste an Amazon or Flipkart link, set the price you'd pay, and get automated Telegram alerts when it drops.</p>
+        </div>
+
+        <div>
+          {user ? (
+            <div className="user-card">
+              <div>
+                <span className="user-email">{user.email}</span>
+                {user.chat_id ? (
+                  <span className="tg-tag" style={{ marginLeft: "8px" }}>
+                    TG: {user.chat_id}
+                  </span>
+                ) : (
+                  <button className="link" style={{ fontSize: "0.82rem", marginLeft: "8px" }} onClick={() => { setTempChatId(""); setShowTgModal(true); }}>
+                    + Link Telegram
+                  </button>
+                )}
+              </div>
+              <button className="link" style={{ fontSize: "0.82rem" }} onClick={() => { setTempChatId(user.chat_id || ""); setShowTgModal(true); }}>
+                Settings
+              </button>
+              <button className="btn-sm" onClick={handleLogout}>
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button className="btn" onClick={() => { setAuthMode("login"); setAuthError(""); setShowAuthModal(true); }}>
+              Sign in / Register
+            </button>
+          )}
+        </div>
       </header>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setShowAuthModal(false)} aria-label="Close">✕</button>
+            
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${authMode === "login" ? "active" : ""}`}
+                onClick={() => { setAuthMode("login"); setAuthError(""); }}
+              >
+                Sign in
+              </button>
+              <button
+                className={`auth-tab ${authMode === "register" ? "active" : ""}`}
+                onClick={() => { setAuthMode("register"); setAuthError(""); }}
+              >
+                Create account
+              </button>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} style={{ position: "static", padding: 0, border: "none", background: "none" }}>
+              <label>Email
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="name@example.com"
+                />
+              </label>
+
+              <label>Password
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                />
+              </label>
+
+              {authMode === "register" && (
+                <label>Telegram Chat ID (optional)
+                  <input
+                    inputMode="numeric"
+                    value={authChatId}
+                    onChange={(e) => setAuthChatId(e.target.value)}
+                    placeholder="e.g. 543236588"
+                  />
+                  <small>Can also be set later in settings.</small>
+                </label>
+              )}
+
+              {authError && <p className="note err">{authError}</p>}
+
+              <button className="btn" style={{ marginTop: "8px" }} disabled={authBusy}>
+                {authBusy ? "Please wait…" : (authMode === "login" ? "Sign in" : "Create account")}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Link / Edit Telegram Modal */}
+      {showTgModal && (
+        <div className="modal-overlay" onClick={() => setShowTgModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setShowTgModal(false)} aria-label="Close">✕</button>
+            <h3>Telegram Alerts Setting</h3>
+            <p className="muted" style={{ fontSize: "0.88rem", margin: "6px 0 16px" }}>
+              Connect your Telegram account to receive instant notifications when prices drop.
+            </p>
+            <form onSubmit={saveTelegramId} style={{ position: "static", padding: 0, border: "none", background: "none" }}>
+              <label>Telegram Chat ID
+                <input
+                  inputMode="numeric"
+                  required
+                  value={tempChatId}
+                  onChange={(e) => setTempChatId(e.target.value)}
+                  placeholder="e.g. 543236588"
+                />
+                <small>Send <code>/start</code> to your bot to find your Chat ID.</small>
+              </label>
+              <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                <button className="btn" style={{ flex: 1 }}>Save</button>
+                <button type="button" className="btn-sm" onClick={() => setShowTgModal(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={add}>
         <label>Product link
@@ -143,8 +371,21 @@ export default function Home() {
           <small>How often to continuously check price</small>
         </label>
         <label>Telegram chat ID
-          <input inputMode="numeric" required value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="123456789" />
-          <small>Send /start to your bot to get this number.</small>
+          <input
+            inputMode="numeric"
+            required
+            value={chatId}
+            onChange={(e) => {
+              setChatId(e.target.value);
+              try { localStorage.setItem("chatId", e.target.value); } catch {}
+            }}
+            placeholder="123456789"
+          />
+          <small>
+            {user?.chat_id && user.chat_id === chatId
+              ? "✓ Linked to your account"
+              : "Send /start to your bot to get this number."}
+          </small>
         </label>
         <button className="btn" disabled={busy}>{busy ? "Reading price…" : "Track product"}</button>
         {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
@@ -152,7 +393,7 @@ export default function Home() {
 
       <section>
         {products.length === 0 ? (
-          <p className="empty">{chatId ? "Nothing tracked for this chat ID yet. Add a product to start." : "Enter your Telegram chat ID to see your tracked products."}</p>
+          <p className="empty">{chatId ? "Nothing tracked for this chat ID yet. Add a product to start." : "Enter your Telegram chat ID or sign in to see your tracked products."}</p>
         ) : (
           <ul>
             {products.map((p) => {

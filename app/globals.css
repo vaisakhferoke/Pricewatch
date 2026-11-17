@@ -3,7 +3,17 @@
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--f-body),system-ui,sans-serif}
 h1,h2{font-family:var(--f-head),system-ui,sans-serif;margin:0;letter-spacing:-.02em}
 .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 64px;display:grid;gap:32px;grid-template-columns:320px 1fr}
-header{grid-column:1/-1}
+header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+header > div{max-width:560px}
+.user-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:.88rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.user-email{font-weight:600}
+.tg-tag{background:#e2ece7;padding:2px 8px;border-radius:10px;font-size:.78rem;font-weight:500;color:var(--ink)}
+.modal-overlay{position:fixed;inset:0;background:rgba(18,38,31,.5);display:flex;align-items:center;justify-content:center;z-index:99;padding:20px}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:380px;box-shadow:0 12px 32px rgba(0,0,0,.15);position:relative}
+.auth-tabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:16px}
+.auth-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:8px;font-weight:600;font-size:.95rem;color:var(--muted);cursor:pointer}
+.auth-tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+.close-btn{position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1}
 header h1{font-size:2.4rem;line-height:1.05}
 header p{margin:6px 0 0;color:var(--muted);max-width:52ch}
 form{position:sticky;top:20px;align-self:start;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;display:grid;gap:14px}

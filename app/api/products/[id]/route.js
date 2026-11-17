@@ -1,14 +1,36 @@
 import { NextResponse } from "next/server";
 import { initDb } from "@/lib/db";
 import { checkProduct } from "@/lib/checker";
+import { getUserFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+async function verifyOwnership(d, productId, req, chatIdParam) {
+  const user = await getUserFromRequest(req);
+  const chatId = chatIdParam || user?.chat_id || null;
+  if (user) {
+    const own = await d.execute({
+      sql: "SELECT id FROM products WHERE id = ? AND (user_id = ? OR chat_id = ?)",
+      args: [productId, user.id, chatId || ""],
+    });
+    return own.rows.length > 0;
+  }
+  if (chatId) {
+    const own = await d.execute({
+      sql: "SELECT id FROM products WHERE id = ? AND chat_id = ?",
+      args: [productId, chatId],
+    });
+    return own.rows.length > 0;
+  }
+  return false;
+}
 
 export async function DELETE(req, { params }) {
   const chatId = new URL(req.url).searchParams.get("chat_id");
   const d = await initDb();
-  const own = await d.execute({ sql: "SELECT id FROM products WHERE id = ? AND chat_id = ?", args: [params.id, chatId] });
-  if (!own.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const allowed = await verifyOwnership(d, params.id, req, chatId);
+  if (!allowed) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   await d.batch(
     [
       { sql: "DELETE FROM price_history WHERE product_id = ?", args: [params.id] },
@@ -24,8 +46,8 @@ export async function PATCH(req, { params }) {
     const body = await req.json();
     const { chat_id, check_interval, target_price } = body;
     const d = await initDb();
-    const own = await d.execute({ sql: "SELECT id FROM products WHERE id = ? AND chat_id = ?", args: [params.id, String(chat_id || "").trim()] });
-    if (!own.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const allowed = await verifyOwnership(d, params.id, req, chat_id);
+    if (!allowed) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const updates = [];
     const args = [];
@@ -59,7 +81,10 @@ export async function POST(req, { params }) {
   try {
     const chatId = new URL(req.url).searchParams.get("chat_id");
     const d = await initDb();
-    const { rows } = await d.execute({ sql: "SELECT * FROM products WHERE id = ? AND chat_id = ?", args: [params.id, chatId] });
+    const allowed = await verifyOwnership(d, params.id, req, chatId);
+    if (!allowed) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const { rows } = await d.execute({ sql: "SELECT * FROM products WHERE id = ?", args: [params.id] });
     if (!rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const result = await checkProduct(rows[0]);
